@@ -1,0 +1,56 @@
+services:
+  db:
+    image: mysql:8.4
+    container_name: kanban_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: kanban_auth
+      MYSQL_USER: app_user
+      MYSQL_PASSWORD: app_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+      target: development
+    container_name: kanban_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run dev"
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: mysql://app_user:app_pass@db:3306/kanban_auth
+      JWT_SECRET: super-secret-change-me
+      JWT_EXPIRES_IN: 1d
+      CORS_ORIGIN: http://localhost:8080
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    ports:
+      - "4000:4000"
+
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+    container_name: kanban_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  db_data:
